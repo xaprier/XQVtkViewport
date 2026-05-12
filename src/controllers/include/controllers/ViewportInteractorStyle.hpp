@@ -8,6 +8,10 @@
 
 class vtkResliceImageViewer;
 
+namespace render {
+class RenderScheduler;
+}
+
 namespace controllers {
 
 /**
@@ -29,6 +33,13 @@ class ViewportInteractorStyle : public vtkInteractorStyleImage {
      */
     void SetViewers(const std::vector<vtkSmartPointer<vtkResliceImageViewer>>& viewers);
 
+    /**
+     * @brief Wire the scheduler so that interaction events request a render
+     *        instead of calling riv->Render() directly. Should be set before
+     *        any interaction events fire.
+     */
+    void SetScheduler(render::RenderScheduler* scheduler);
+
     void OnMouseMove() override;
     void OnLeftButtonDown() override;
     void OnLeftButtonUp() override;
@@ -38,6 +49,11 @@ class ViewportInteractorStyle : public vtkInteractorStyleImage {
   private:
     /** @brief Finds the viewer whose viewport contains the current cursor position. */
     bool _UpdateActiveViewer();
+
+    /** @brief Requests a render for the active viewer's window via the scheduler (or directly if no scheduler). */
+    void _RequestRender();
+
+    render::RenderScheduler* m_scheduler{nullptr};  // non-owning, optional
 
     std::vector<vtkSmartPointer<vtkResliceImageViewer>> m_viewers;
 

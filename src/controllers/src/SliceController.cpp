@@ -15,6 +15,8 @@
 
 #include <algorithm>
 
+#include "render/RenderScheduler.hpp"
+
 namespace controllers {
 
 SliceController::SliceController(QObject* parent)
@@ -22,9 +24,10 @@ SliceController::SliceController(QObject* parent)
 
 SliceController::~SliceController() = default;
 
-void SliceController::Initialize(const std::vector<QVTKOpenGLNativeWidget*>& vtkWidgets) {
+void SliceController::Initialize(const std::vector<QVTKOpenGLNativeWidget*>& vtkWidgets,
+                                 render::RenderScheduler* scheduler) {
     m_vtkWidgets = vtkWidgets;
-
+    m_scheduler = scheduler;
     SetupViewers();
 }
 
@@ -48,11 +51,8 @@ void SliceController::SetupViewers() {
             widget = m_vtkWidgets[i];
         }
 
-        if (!widget ||
-            !widget->renderWindow() ||
-            !widget->interactor()) {
-            emit StatusChanged(
-                tr("Cannot setup viewers for view %1").arg(i));
+        if (!widget || !widget->renderWindow() || !widget->interactor()) {
+            emit StatusChanged(tr("Cannot setup viewers for view %1").arg(i));
             return;
         }
 
@@ -65,6 +65,18 @@ void SliceController::SetupViewers() {
         riv->SetSliceOrientation(kOrientations[i]);
 
         m_rivs.push_back(riv);
+
+        // Register each RIV with the scheduler. In viewport mode all three RIVs
+        // share the same vtkRenderWindow; the scheduler deduplicates by window so
+        // only one ExecuteRender() fires per Flush(). The first registered RIV
+        // target wins for that window — it calls riv->Render() then window->Render().
+        // Subsequent RegisterRiv() calls for the same window are de-duplicated
+        // (they return the existing handle), so only the first RIV's pipeline runs.
+        // For viewport mode this is acceptable because all three RIVs share one
+        // render window and vtkResliceImageViewer::Render() on any of them syncs
+        // the shared pipeline.
+        if (m_scheduler)
+            m_scheduler->RegisterRiv(riv.Get());
     }
 }
 
@@ -77,23 +89,14 @@ void SliceController::SetImageData(vtkImageData* image) {
 
     SetupPipeline();
 
-    for (const auto& riv : m_rivs) {
-        if (!riv)
-            continue;
-
-        // riv->GetRenderer()->ResetCamera();
-        // riv->GetRenderer()->ResetCameraClippingRange();
-
-        riv->Render();
-    }
+    RequestRenderAll();
 }
 
 void SliceController::GetRenderers(std::vector<vtkSmartPointer<vtkRenderer>>& outRenderers) const {
     outRenderers.clear();
     for (const auto& riv : m_rivs) {
-        if (riv) {
+        if (riv)
             outRenderers.push_back(riv->GetRenderer());
-        }
     }
 }
 
@@ -111,14 +114,9 @@ void SliceController::SetupPipeline() {
         auto& riv = m_rivs[i];
         riv->SetInputData(m_image);
         riv->SetResliceModeToAxisAligned();
-        riv->SetSliceOrientation(kOrientations[i]);  // enforce after mode change
+        riv->SetSliceOrientation(kOrientations[i]);
 
         {
-            // Calculate middle slice index based on image bounds, spacing, and origin.
-            // kSliceAxis maps view index to the world-axis used for slicing:
-            //   Axial  (XY, i=0) → Z axis (index 2)
-            //   Coronal(XZ, i=1) → Y axis (index 1)
-            //   Sagittal(YZ,i=2) → X axis (index 0)
             static constexpr int kSliceAxis[3] = {2, 1, 0};
 
             double spacing[3];
@@ -151,7 +149,6 @@ void SliceController::SetupPipeline() {
     }
 
     FitToView();
-    RenderAll();
 }
 
 void SliceController::FitToView() {
@@ -163,7 +160,6 @@ void SliceController::FitToView() {
 
     for (size_t i = 0; i < m_rivs.size(); ++i) {
         auto& riv = m_rivs[i];
-
         if (!riv)
             continue;
 
@@ -178,17 +174,15 @@ void SliceController::FitToView() {
         double height = 0.0;
 
         switch (i) {
-            case 0:  // Axial (XY)
+            case 0:
                 width = bounds[1] - bounds[0];
                 height = bounds[3] - bounds[2];
                 break;
-
-            case 1:  // Coronal (XZ)
+            case 1:
                 width = bounds[1] - bounds[0];
                 height = bounds[5] - bounds[4];
                 break;
-
-            case 2:  // Sagittal (YZ)
+            case 2:
                 width = bounds[3] - bounds[2];
                 height = bounds[5] - bounds[4];
                 break;
@@ -199,9 +193,6 @@ void SliceController::FitToView() {
 
         const int* size = renderWindow->GetSize();
 
-        // Use renderer's actual viewport fraction so this works correctly for
-        // both multi-window (vp={0,0,1,1}) and single-window viewport mode
-        // (vp={0,0,0.33,1} etc.) where each renderer covers only a sub-region.
         double vp[4];
         renderer->GetViewport(vp);
         const double vpWidth = vp[2] - vp[0];
@@ -213,21 +204,11 @@ void SliceController::FitToView() {
                 : 1.0;
 
         const double imageAspect = width / height;
-
-        double parallelScale = 0.0;
-
-        if (imageAspect > viewportAspect) {
-            parallelScale = width / (2.0 * viewportAspect);
-        } else {
-            parallelScale = height / 2.0;
-        }
-
-        // Small margin so image doesn't touch viewport edges.
+        double parallelScale = (imageAspect > viewportAspect) ? width / (2.0 * viewportAspect) : height / 2.0;
         parallelScale *= 1.05;
 
         camera->ParallelProjectionOn();
         camera->SetParallelScale(parallelScale);
-
         renderer->ResetCameraClippingRange();
     }
 }
@@ -241,8 +222,6 @@ void SliceController::OnSphereUpdated(const Vec3& worldPos) {
     m_image->GetSpacing(spacing);
     m_image->GetOrigin(origin);
 
-    // kSliceAxis: view index → world-axis index used for slicing.
-    // Axial(XY,i=0)→Z(2), Coronal(XZ,i=1)→Y(1), Sagittal(YZ,i=2)→X(0)
     static constexpr int kSliceAxis[3] = {2, 1, 0};
 
     for (int i = 0; i < 3; ++i) {
@@ -253,29 +232,31 @@ void SliceController::OnSphereUpdated(const Vec3& worldPos) {
         if (spacing[ax] == 0.0)
             continue;
 
-        const int sliceIdx =
-            static_cast<int>((worldPos[ax] - origin[ax]) / spacing[ax] + 0.5);
-
-        const int clamped =
-            std::max(m_rivs[i]->GetSliceMin(),
-                     std::min(m_rivs[i]->GetSliceMax(), sliceIdx));
-
+        const int sliceIdx = static_cast<int>((worldPos[ax] - origin[ax]) / spacing[ax] + 0.5);
+        const int clamped = std::max(m_rivs[i]->GetSliceMin(), std::min(m_rivs[i]->GetSliceMax(), sliceIdx));
         m_rivs[i]->SetSlice(clamped);
-
     }
 
     RenderAll();
 }
 
-void SliceController::RenderAll() {
-    qDebug() << "SliceController::RenderAll() called";
-    for (auto& riv : m_rivs) {
-        // ResetCameraClippingRange after Render so 3D actors (e.g. sphere)
-        // are not clipped by the tight image-plane range set by vtkResliceImageViewer.
-        riv->Render();
-        riv->GetRenderer()->ResetCameraClippingRange();
-        riv->GetRenderWindow()->Render();
+void SliceController::RequestRenderAll() {
+    if (!m_scheduler)
+        return;
+    for (const auto& riv : m_rivs) {
+        if (riv && riv->GetRenderWindow())
+            m_scheduler->RequestRender(riv->GetRenderWindow());
     }
+}
+
+void SliceController::RenderAll() {
+    RequestRenderAll();
+    if (m_scheduler)
+        m_scheduler->Flush();
+}
+
+render::RenderScheduler* SliceController::Scheduler() const {
+    return m_scheduler;
 }
 
 const std::vector<vtkSmartPointer<vtkResliceImageViewer>>&

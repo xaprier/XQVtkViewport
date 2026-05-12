@@ -13,6 +13,10 @@ class vtkResliceImageViewer;
 class vtkRenderer;
 class QVTKOpenGLNativeWidget;
 
+namespace render {
+class RenderScheduler;
+}
+
 namespace controllers {
 
 /**
@@ -41,20 +45,36 @@ class SliceController : public IControllerBase {
      * @brief Initialises the viewers from the provided widget list.
      *
      * Pass 3 widgets for multi-window mode or 1 widget for viewport mode.
+     * @param scheduler Render scheduler owned by the parent IViewController.
+     *                  SliceController registers its RIV targets here and uses
+     *                  RequestRender/Flush for all rendering.
      */
-    void Initialize(const std::vector<QVTKOpenGLNativeWidget*>& vtkWidgets);
+    void Initialize(const std::vector<QVTKOpenGLNativeWidget*>& vtkWidgets,
+                    render::RenderScheduler* scheduler);
 
-    /** @brief Pushes @p image into the reslice pipeline and refreshes all views. */
+    /** @brief Pushes @p image into the reslice pipeline and requests a render. */
     void SetImageData(vtkImageData* image);
 
     /** @brief Fills @p outRenderers with the renderer from each viewer. */
     void GetRenderers(std::vector<vtkSmartPointer<vtkRenderer>>& outRenderers) const;
 
-    /** @brief Renders all views via vtkResliceImageViewer::Render() to keep the reslice pipeline consistent. */
+    /**
+     * @brief Request a render for all registered RIV windows via the scheduler.
+     *
+     * Callers should follow this with Scheduler()->Flush() (or the parent
+     * controller's Flush path) when all state mutations for the current event
+     * are complete.
+     */
+    void RequestRenderAll();
+
+    /** @brief Convenience: RequestRenderAll() + Flush() in one call. */
     void RenderAll();
 
     /** @brief Returns the underlying viewer list, e.g. for use by ViewportInteractorStyle. */
     const std::vector<vtkSmartPointer<vtkResliceImageViewer>>& GetViewers() const;
+
+    /** @brief Exposes the scheduler so parent controllers can call Flush(). */
+    render::RenderScheduler* Scheduler() const;
 
   public slots:
     /** @brief Scrolls each slice plane to the position nearest to @p worldPos. */
@@ -69,6 +89,7 @@ class SliceController : public IControllerBase {
 
     std::vector<vtkSmartPointer<vtkResliceImageViewer>> m_rivs;
     std::vector<QVTKOpenGLNativeWidget*> m_vtkWidgets;
+    render::RenderScheduler* m_scheduler{nullptr};  // non-owning, owned by IViewController
 };
 
 }  // namespace controllers

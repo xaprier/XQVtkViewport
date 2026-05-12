@@ -15,6 +15,8 @@
 #include <QDebug>
 #include <algorithm>
 
+#include "render/RenderScheduler.hpp"
+
 namespace controllers {
 
 SphereController::SphereController(QObject* parent)
@@ -157,9 +159,18 @@ SphereController::DragPlane SphereController::PlaneFor(vtkRenderer* renderer) co
     return DragPlane::Axial;
 }
 
+void SphereController::SetScheduler(render::RenderScheduler* scheduler) {
+    m_scheduler = scheduler;
+}
+
 void SphereController::RenderAll() {
-    qDebug() << "SphereController::RenderAll: Rendering all associated render windows.";
-    // Collect unique render windows from registered renderers
+    if (m_scheduler) {
+        m_scheduler->RequestRenderAll();
+        m_scheduler->Flush();
+        return;
+    }
+
+    // Fallback when no scheduler is wired (should not happen in normal usage).
     std::vector<vtkRenderWindow*> seen;
     for (const auto& e : m_rendererEntries) {
         if (!e.renderer)

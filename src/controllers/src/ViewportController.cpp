@@ -12,14 +12,14 @@
 #include "controllers/SliceController.hpp"
 #include "controllers/SphereController.hpp"
 #include "controllers/ViewportInteractorStyle.hpp"
+#include "render/RenderScheduler.hpp"
 
 namespace controllers {
 
 ViewportController::ViewportController(QObject* parent)
     : IViewController(parent) {
+    m_scheduler = std::make_unique<render::RenderScheduler>();
 }
-
-ViewportController::~ViewportController() = default;
 
 void ViewportController::_Initialize(const std::vector<QVTKOpenGLNativeWidget*> vtkWidgets) {
     if (m_initialized)
@@ -63,20 +63,18 @@ void ViewportController::_AddSphere() {
     };
 
     m_sphereController = std::make_unique<SphereController>();
+    m_sphereController->SetScheduler(m_scheduler.get());
 
     std::vector<vtkSmartPointer<vtkRenderer>> renderers;
     m_sliceController->GetRenderers(renderers);
 
     for (int i = 0; i < 3; ++i) {
-        if (renderers[i]) {
+        if (renderers[i])
             m_sphereController->AddRenderer(renderers[i], kPlanes[i]);
-        }
     }
 
-    // SphereController deduplicates; one call is sufficient for the shared interactor.
-    if (m_interactors[0]) {
+    if (m_interactors[0])
         m_sphereController->AddInteractor(m_interactors[0]);
-    }
 
     QObject::connect(
         m_sphereController.get(), &SphereController::SphereMoved,
@@ -85,10 +83,11 @@ void ViewportController::_AddSphere() {
     if (m_dicomLoaded) {
         double bounds[6];
         m_imageData->GetBounds(bounds);
-        const double centerX = (bounds[0] + bounds[1]) * 0.5;
-        const double centerY = (bounds[2] + bounds[3]) * 0.5;
-        const double centerZ = (bounds[4] + bounds[5]) * 0.5;
-        m_sphereController->SetPosition({centerX, centerY, centerZ});
+        m_sphereController->SetPosition({
+            (bounds[0] + bounds[1]) * 0.5,
+            (bounds[2] + bounds[3]) * 0.5,
+            (bounds[4] + bounds[5]) * 0.5,
+        });
     }
 
     m_sphereController->SetRadius(m_sphereRadius);
@@ -148,9 +147,8 @@ void ViewportController::_SetSphereColor(const std::array<double, 3> color) {
 }
 
 void ViewportController::_Render() {
-    if (!m_vtkWidgets.empty() && m_vtkWidgets[0] && m_vtkWidgets[0]->renderWindow()) {
-        m_vtkWidgets[0]->renderWindow()->Render();
-    }
+    m_scheduler->RequestRenderAll();
+    m_scheduler->Flush();
 }
 
 void ViewportController::_SetImageData(vtkImageData* imageData) {
@@ -160,7 +158,6 @@ void ViewportController::_SetImageData(vtkImageData* imageData) {
     m_imageData = vtkSmartPointer<vtkImageData>::New();
     m_imageData->ShallowCopy(imageData);
 
-    // we will initialize adapters on first image load, so that we can pass the image data to them.
     if (!m_dicomLoaded) {
         _SetupPipeline(imageData);
         m_dicomLoaded = true;
@@ -172,10 +169,11 @@ void ViewportController::_SetImageData(vtkImageData* imageData) {
     if (m_sphereController) {
         double bounds[6];
         imageData->GetBounds(bounds);
-        const double centerX = (bounds[0] + bounds[1]) * 0.5;
-        const double centerY = (bounds[2] + bounds[3]) * 0.5;
-        const double centerZ = (bounds[4] + bounds[5]) * 0.5;
-        m_sphereController->SetPosition({centerX, centerY, centerZ});
+        m_sphereController->SetPosition({
+            (bounds[0] + bounds[1]) * 0.5,
+            (bounds[2] + bounds[3]) * 0.5,
+            (bounds[4] + bounds[5]) * 0.5,
+        });
     }
 
     _Render();
@@ -188,14 +186,13 @@ void ViewportController::_SetupPipeline(vtkImageData* imageData) {
 
     if (!m_sliceController) {
         m_sliceController = std::make_unique<SliceController>();
-        m_sliceController->Initialize(m_vtkWidgets);
+        m_sliceController->Initialize(m_vtkWidgets, m_scheduler.get());
 
-        // Apply viewport coordinates before SetImageData/FitToView so that
-        // FitToView computes the correct aspect ratio for each sub-region.
         _ApplyViewportLayout();
 
         m_interactorStyle = vtkSmartPointer<ViewportInteractorStyle>::New();
         m_interactorStyle->SetViewers(m_sliceController->GetViewers());
+        m_interactorStyle->SetScheduler(m_scheduler.get());
         m_interactors[0]->SetInteractorStyle(m_interactorStyle);
 
         if (m_sphereController) {

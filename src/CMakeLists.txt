@@ -1,17 +1,21 @@
 cmake_minimum_required(VERSION 3.20)
 
 file (GLOB_RECURSE CPP_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/app/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ui/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/adapters/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/app/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/controllers/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/overlays/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/render/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui/src/*.cpp"
 )
 
 file (GLOB_RECURSE HPP_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/app/include/app/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ui/include/ui/*.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/adapters/include/adapters/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/app/include/app/*.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/controllers/include/controllers/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/overlays/include/overlays/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/render/include/render/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui/include/ui/*.hpp"
 )
 
 add_executable(XQVtkViewport_Widgets
@@ -21,10 +25,12 @@ add_executable(XQVtkViewport_Widgets
 
 target_include_directories(XQVtkViewport_Widgets
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/app/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/ui/include
         ${CMAKE_CURRENT_SOURCE_DIR}/adapters/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/include
         ${CMAKE_CURRENT_SOURCE_DIR}/controllers/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/overlays/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/render/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/include
 )
 
 target_link_libraries(XQVtkViewport_Widgets

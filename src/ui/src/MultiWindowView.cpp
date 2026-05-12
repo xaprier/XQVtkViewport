@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "controllers/MultiWindowController.hpp"
+#include "overlays/FPSOverlay.hpp"
 
 namespace ui {
 
@@ -25,6 +26,7 @@ void MultiWindowView::_setupUI() {
     layout->setSpacing(2);
 
     m_vtkWidgets.resize(3);
+    m_fpsOverlays.resize(3);
 
     for (int i = 0; i < 3; ++i) {
         auto renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
@@ -32,6 +34,8 @@ void MultiWindowView::_setupUI() {
 
         m_vtkWidgets[i] = new QVTKOpenGLNativeWidget(this);
         m_vtkWidgets[i]->setRenderWindow(renderWindow);
+
+        m_fpsOverlays[i] = new overlays::FPSOverlay(m_vtkWidgets[i]);
 
         layout->addWidget(m_vtkWidgets[i]);
     }

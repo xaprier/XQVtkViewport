@@ -4,11 +4,13 @@
 #include <vtkImageData.h>
 #include <vtkSmartPointer.h>
 
+#include <memory>
 #include <vector>
 
 #include "controllers/IControllerBase.hpp"
 #include "controllers/SliceController.hpp"
 #include "controllers/SphereController.hpp"
+#include "render/RenderScheduler.hpp"
 
 class vtkRenderWindow;
 class vtkRenderWindowInteractor;
@@ -126,6 +128,13 @@ class IViewController : public IControllerBase {
     virtual void _Render() = 0;
     virtual void _SetImageData(vtkImageData* data) = 0;
     virtual void _SetupPipeline(vtkImageData* imageData) = 0;
+
+    // ── Render scheduling ────────────────────────────────────────────────────
+    // Each IViewController owns exactly one RenderScheduler. Constructed in
+    // each concrete subclass constructor (after the full type is visible).
+    // Subclasses register their render windows/RIVs in _Initialize(), then
+    // call m_scheduler->RequestRender() / Flush() instead of Render() calls.
+    std::unique_ptr<render::RenderScheduler> m_scheduler;
 
     bool m_initialized{false};
     bool m_sphereAdded{false};

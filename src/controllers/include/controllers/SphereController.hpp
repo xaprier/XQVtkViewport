@@ -8,6 +8,10 @@
 
 #include "controllers/IControllerBase.hpp"
 
+namespace render {
+class RenderScheduler;
+}
+
 class vtkActor;
 class vtkCallbackCommand;
 class vtkCellPicker;
@@ -46,6 +50,15 @@ class SphereController : public IControllerBase {
     /** @brief Registers an interactor and attaches mouse-event observers. */
     void AddInteractor(vtkSmartPointer<vtkRenderWindowInteractor> interactor);
 
+    /**
+     * @brief Set the scheduler used for render requests.
+     *
+     * The SphereController does not own the scheduler — it is owned by the
+     * parent IViewController. Call this after constructing SphereController
+     * and before any drag interactions begin.
+     */
+    void SetScheduler(render::RenderScheduler* scheduler);
+
     /** @brief Removes the actor from all renderers and detaches all observers. */
     void Cleanup();
 
@@ -83,6 +96,8 @@ class SphereController : public IControllerBase {
 
     std::vector<RendererEntry> m_rendererEntries;
     std::vector<vtkSmartPointer<vtkRenderWindowInteractor>> m_interactors;
+
+    render::RenderScheduler* m_scheduler{nullptr};  // non-owning
 
     bool m_isDragging{false};
     vtkRenderer* m_activeRenderer{nullptr};

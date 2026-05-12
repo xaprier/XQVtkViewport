@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 
 #include "controllers/ViewportController.hpp"
+#include "overlays/FPSOverlay.hpp"
 
 namespace ui {
 
@@ -29,6 +30,7 @@ void ViewportView::_setupUI() {
     layout->addWidget(widget);
 
     m_vtkWidgets = {widget};
+    m_fpsOverlays = {new overlays::FPSOverlay(widget)};
 
     m_viewportController->Initialize(m_vtkWidgets);
     connect(m_viewportController.get(), &controllers::ViewportController::StatusChanged,
