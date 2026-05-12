@@ -16,7 +16,7 @@ class MultiWindowController : public IViewController {
 
   public:
     explicit MultiWindowController(QObject* parent = nullptr);
-    ~MultiWindowController() override;
+    ~MultiWindowController() override = default;
 
   private:
     void _Initialize(const std::vector<QVTKOpenGLNativeWidget*> vtkWidgets) override;

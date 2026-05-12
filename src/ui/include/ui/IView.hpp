@@ -10,6 +10,10 @@ class vtkGenericOpenGLRenderWindow;
 class vtkRenderWindowInteractor;
 class QVTKOpenGLNativeWidget;
 
+namespace overlays {
+class FPSOverlay;
+}
+
 namespace ui {
 
 /**
@@ -25,6 +29,8 @@ class IView : public QWidget {
     explicit IView(QWidget* parent = nullptr) : QWidget(parent) {}
     ~IView() = default;
 
+    std::vector<overlays::FPSOverlay*>& GetFPSOverlays() { return m_fpsOverlays; }
+
   Q_SIGNALS:
     /** @brief Forwarded from the underlying controller for status bar display. */
     void StatusChanged(const QString& message);
@@ -33,6 +39,7 @@ class IView : public QWidget {
     virtual void _setupUI() = 0;
 
     std::vector<QVTKOpenGLNativeWidget*> m_vtkWidgets{};
+    std::vector<overlays::FPSOverlay*> m_fpsOverlays{};
 };
 }  // namespace ui
 

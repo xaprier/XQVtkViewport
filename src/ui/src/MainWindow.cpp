@@ -13,6 +13,7 @@
 #include "adapters/ColorAdapter.hpp"
 #include "controllers/DicomController.hpp"
 #include "controllers/MultiWindowController.hpp"
+#include "overlays/FPSOverlay.hpp"
 #include "ui/ControllerPanel.hpp"
 #include "ui/ControllerPanelSphereItem.hpp"
 #include "ui/MultiWindowView.hpp"
@@ -101,10 +102,55 @@ void MainWindow::_ConnectSignals() {
         _Notification(fullMessage);
     });
 
-    // IViewController::SetImageData tek çağrıyla tüm m_instances'a yayılır;
-    // MultiWindowController'a bağlamak ViewportController'ı da besler.
+    // IViewController::SetImageData signal from DicomController is connected to MultiWindowController, which will trigger renders in both views.
     connect(m_dicomController, &controllers::DicomController::ImageDataReady,
             m_multiWindowView->GetController(), &controllers::MultiWindowController::SetImageData);
+
+    // FPSOverlay connections
+    connect(m_controllerPanel, &ControllerPanel::FPSOverlayEnableChanged, this, [this](bool enabled) {
+        for (auto* overlay : m_viewportView->GetFPSOverlays()) {
+            overlay->SetEnabled(enabled);
+        }
+        for (auto* overlay : m_multiWindowView->GetFPSOverlays()) {
+            overlay->SetEnabled(enabled);
+        }
+    });
+
+    connect(m_controllerPanel, &ControllerPanel::FPSOverlayColorChanged, this, [this](const QColor& color) {
+        for (auto* overlay : m_viewportView->GetFPSOverlays()) {
+            overlay->SetTextColor(color);
+        }
+        for (auto* overlay : m_multiWindowView->GetFPSOverlays()) {
+            overlay->SetTextColor(color);
+        }
+    });
+
+    connect(m_controllerPanel, &ControllerPanel::FPSOverlayPositionChanged, this, [this](const overlays::OverlayPosition& position) {
+        for (auto* overlay : m_viewportView->GetFPSOverlays()) {
+            overlay->SetPosition(position);
+        }
+        for (auto* overlay : m_multiWindowView->GetFPSOverlays()) {
+            overlay->SetPosition(position);
+        }
+    });
+
+    connect(m_controllerPanel, &ControllerPanel::FPSOverlayMarginChanged, this, [this](int margin) {
+        for (auto* overlay : m_viewportView->GetFPSOverlays()) {
+            overlay->SetMargin(margin);
+        }
+        for (auto* overlay : m_multiWindowView->GetFPSOverlays()) {
+            overlay->SetMargin(margin);
+        }
+    });
+
+    connect(m_controllerPanel, &ControllerPanel::FPSOverlayFontSizeChanged, this, [this](int fontSize) {
+        for (auto* overlay : m_viewportView->GetFPSOverlays()) {
+            overlay->SetFontSize(fontSize);
+        }
+        for (auto* overlay : m_multiWindowView->GetFPSOverlays()) {
+            overlay->SetFontSize(fontSize);
+        }
+    });
 
     connect(m_viewportView, &ViewportView::StatusChanged, this, [this](const QString& message) {
         _Notification("Viewport: " + message);
